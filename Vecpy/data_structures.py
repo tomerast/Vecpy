@@ -8,13 +8,15 @@ from weighted_median import *
 
 
 class vec_properties:
-    def __init__(self,source,ws,dt,pixel_to_meter,vxunits,vyunits):
+    def __init__(self,source,ws,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter):
         self.source = source
         self.ws = ws
-        self.dt = dt
-        self.pixel_to_meter = pixel_to_meter
-        self.vxunits = vxunits
-        self.vyunits = vyunits
+        self.time_unit = time_unit
+        self.time_scale_to_seconds = time_scale_to_seconds
+        self.length_unit = length_unit
+        self.length_scale_to_meter = length_scale_to_meter
+        self.velocity_units = length_unit+'/'+time_unit
+        
         
     def show(self):
         print(
@@ -27,21 +29,22 @@ class vec_properties:
 
 
 class field_properties:
-    def __init__(self,frame,time,images_path,source,dt,pixel_to_meter,xunits,yunits,vxunits,vyunits):
+    def __init__(self,frame,time,images_path,source,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter):
         self.frame = frame
         self.time = time
         self.images_path = images_path
         self.source = source
         self.history = ''
-        self.dt = dt
-        self.pixel_to_meter = pixel_to_meter
-        self.xunits = xunits
-        self.yunits = yunits
-        self.vxunits = vxunits
-        self.vyunits = vyunits
+        self.time_unit = time_unit
+        self.time_scale_to_seconds = time_scale_to_seconds
+        self.length_unit = length_unit
+        self.length_scale_to_meter = length_scale_to_meter
+        self.velocity_units = length_unit+'/'+time_unit
     
     def show(self):
         print(
+        'frame: ',self.frame,'\n',
+        'absolute time: ',self.time,'\n',
         'images_path: ',self.images_path,'\n',
         'source: ',self.source,'\n',
         'dt: ',self.dt,'\n',
@@ -63,15 +66,23 @@ class vector:
         self.S2N = S2N
         self.properties = properties
     
-    def convert_units(self,length_scales,time_scales):
-        LS = {'pixel':float(self.properties.pixel_to_meter) ,'mm':0.001, 'cm':0.01, 'm':1.0, 'km':1000.}
-        TS = {'dt':float(self.properties.dt),'ms':0.001, 's':1.0, 'min':60.,'hour':3600.}
-        self.X = self.X*(LS[length_scales[0]]/LS[length_scales[1]])
-        self.Y = self.Y*(LS[length_scales[0]]/LS[length_scales[1]])
-        self.U = self.U*(LS[length_scales[0]]/LS[length_scales[1]])*(TS[time_scales[1]]/TS[time_scales[0]])
-        self.V = self.V*(LS[length_scales[0]]/LS[length_scales[1]]*TS[time_scales[1]]/TS[time_scales[0]])
-        self.properties.vxunits = str(length_scales[1])+'/'+str(time_scales[1])
-        self.properties.vyunits = str(length_scales[1])+'/'+str(time_scales[1])
+    def convert_units(self,output_length_unit,output_time_unit):
+        LS = {'mm':0.001, 'cm':0.01, 'm':1.0,'meter':1.0, 'km':1000.}
+        TS = {'ms':0.001, 's':1.0,'second':1.0, 'min':60.,'h':3600.,'hour':3600.}
+        LS[self.properties.length_unit]=float(self.properties.length_scale_to_meter)
+        TS[self.properties.time_unit]=float(self.properties.time_scale_to_seconds)
+        
+        self.X = self.X*(LS[self.properties.length_unit]/LS[output_length_unit])
+        self.Y = self.Y*(LS[self.properties.length_unit]/LS[output_length_unit])
+
+        self.U = self.U*(LS[self.properties.length_unit]/LS[output_length_unit])*(TS[output_time_unit]/TS[self.properties.time_unit])
+        self.V = self.V*(LS[self.properties.length_unit]/LS[output_length_unit])*(TS[output_time_unit]/TS[self.properties.time_unit])
+        
+        self.properties.lenght_unit = output_length_unit
+        self.properties.length_scale_to_meter = LS[output_length_unit]
+        self.properties.time_unit = output_time_unit
+        self.properties.time_scale_to_seconds = TS[output_time_unit]
+        self.properties.velocity_units = output_length_unit+'/'+output_time_unit
     
 
 class field:
@@ -83,11 +94,11 @@ class field:
 
     def __add__(self,other):
         check_list = []
-        check_list.append(self.properties.pixel_to_meter == other.properties.pixel_to_meter)
-        check_list.append(self.properties.xunits == other.properties.xunits)
-        check_list.append(self.properties.yunits == other.properties.yunits)
-        check_list.append(self.properties.vxunits == other.properties.vxunits)
-        check_list.append(self.properties.vyunits == other.properties.vyunits)
+        check_list.append(self.properties.lenght_unit == other.properties.lenght_unit)
+        check_list.append(self.properties.length_scale_to_meter == other.properties.length_scale_to_meter)
+        check_list.append(self.properties.time_unit == other.properties.time_unit)
+        check_list.append(self.properties.time_scale_to_seconds == other.properties.time_scale_to_seconds)
+        check_list.append(self.properties.velocity_units == other.properties.velocity_units)
 
         if all(check_list):
             sum_properties = self.properties
@@ -121,6 +132,17 @@ class field:
     def transfer(self,other):
         for xy in list(other.data.keys()):
             self.add_vec(other.data[xy])
+    
+    def convert_field_units(self,output_length_unit,output_time_unit):    
+        XY = list(self.data.keys())
+        for xy in XY:
+            self.data[xy].convert_units(output_length_unit,output_time_unit)
+            
+        self.properties.lenght_unit = self.data[XY[0]].properties.lenght_unit
+        self.properties.length_scale_to_meter = self.data[XY[0]].properties.length_scale_to_meter
+        self.properties.time_unit = self.data[XY[0]].properties.time_unit
+        self.properties.time_scale_to_seconds = self.data[XY[0]].properties.time_scale_to_seconds
+        self.properties.velocity_units = self.data[XY[0]].properties.velocity_units
         
     def remove_vec(self,X,Y,vector=None):
         if vector is not None:
@@ -332,11 +354,38 @@ class run:
             return True
         else:
             no_gp_frames = [x for x, y in zip(frames, gp_exists) if y == False]
+            frames_with_gp = [x for x, y in zip(frames, gp_exists) if y == True]
             print('Frames without the requested grid point ','(',x,',',y,')',': ',no_gp_frames)
+            return frames_with_gp
 
-    def grid_point_velocity(self,x,y):
+    def run_grid(self):
         frames = self.frames()
-        if self.gp_exists_all_frames(x,y):
+        Y_agp = []
+        X_agp =[]
+        for frame in frames:
+            X,Y = self.fields[frame].return_grid()
+            Y_agp += Y.tolist()
+            Y_agp = sorted(list(set(Y_agp)))
+            X_agp += X.tolist()
+            X_agp = sorted(list(set(X_agp)))
+        
+        return np.meshgrid(np.array(X_agp),np.array(Y_agp))
+
+    def grid_point_velocity(self,x,y,frames=None):
+        if frames==None:
+            frames = self.frames()    
+            if self.gp_exists_all_frames(x,y):
+                U = []
+                V = []
+                for f in frames:
+                    u,v = self.fields[f].return_vel(x,y)
+                    U.append(u)
+                    V.append(v)
+                    
+                U = np.array(U)
+                V = np.array(V)
+                return U,V
+        else:
             U = []
             V = []
             for f in frames:
@@ -347,8 +396,21 @@ class run:
             U = np.array(U)
             V = np.array(V)
             return U,V
-    
-    def velocity_properties(self):
+
+    def mean_gp_velocity(self,x,y):
+        for_all_frames = self.gp_exists_all_frames(x,y)
+        if for_all_frames==True:
+            U,V = self.grid_point_velocity(x,y)
+            U_rms = U - np.nanmean(U)
+            V_rms = V - np.nanmean(V)
+            return np.nanmean(U),U_rms,np.nanmean(V),V_rms
+        else:
+            U,V = self.grid_point_velocity(x,y,for_all_frames)
+            U_rms = U - np.nanmean(U)
+            V_rms = V - np.nanmean(V)
+            return np.nanmean(U),U_rms,np.nanmean(V),V_rms
+
+    def mean_velocity_properties(self):
         frames = self.frames()
         U_mean = []
         V_mean = []
@@ -368,7 +430,18 @@ class run:
         V_rms = np.array(V_rms)
         return U_mean,U_rms,V_mean,V_rms
 
-    
+    def run_mean_velocities(self):
+        X,Y = self.run_grid()
+        U_mean = np.zeros(X.shape)
+        V_mean = np.zeros(Y.shape)
+        for row in range(X.shape[0]):
+            for col in range(X.shape[0]):
+                u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
+                U_mean[row,col] = u
+                V_mean[row,col] = v
+
+        return U_mean,V_mean
+
     def mean_profile(self,axis='y'):
         frames = self.frames()
         if axis=='y' or axis=='Y':
@@ -428,11 +501,44 @@ class run:
 
     def corr_s(self,x1,y1,x2,y2):
         if self.gp_exists_all_frames(x1,y1) and self.gp_exists_all_frames(x2,y2):
-            U1,V1 = self.grid_point_velocity(x1,y1)
-            U2,V2 = self.grid_point_velocity(x2,y2)
-            U1 = U1 - np.nanmean(U1)
-            V1 = V1 - np.nanmean(V1)
-            U2 = U2 - np.nanmean(U2)
-            V2 = V2 - np.nanmean(V2)
+            Umean1,U1,Vmean1,V1 = self.mean_gp_velocity(x1,y1)
+            Umean2,U2,Vmean2,V2 = self.mean_gp_velocity(x2,y2)
 
-            return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1))*np.sqrt(np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1))*np.sqrt(np.inner(V2, V2)))
+            return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
+
+        else:
+            frames1 = self.gp_exists_all_frames(x1,y1)
+            frames2 = self.gp_exists_all_frames(x2,y2)
+            frames_for_both = set(frames1).intersection(frames2)
+            U1,V1 = self.grid_point_velocity(x1,y1,frames_for_both)
+            U2,V2 = self.grid_point_velocity(x2,y2,frames_for_both)
+            Umean1,nouse1,Vmean1,nouse2 = self.mean_gp_velocity(x1,y1)
+            Umean2,nouse1,Vmean2,nouse2 = self.mean_gp_velocity(x2,y2)
+            U1 = U1 - Umean1
+            V1 = V1 - Vmean1
+            U2 = U2 - Umean2
+            V2 = V2 - Vmean2
+
+            return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
+
+    def tke_frame(self,frame):
+        X,Y = self.fields[frame].return_grid()
+        U,V = self.fields[frame].return_all_velocities()
+        tke = np.zeros(U.shape)
+        for ind in range(len(X)):
+            umean,urms,vmean,vrms =  self.mean_gp_velocity(X[ind],Y[ind])
+            # need to check equation (devide by mean velocities???)
+            tke[ind] = 0.5*(np.sqrt((U[ind]-umean)**2+(V[ind]-vmean)**2))
+
+        return X,Y,tke
+
+    def run_tke(self):
+        X,Y = self.run_grid()
+        tke = np.zeros(X.shape)
+        for row in range(X.shape[0]):
+            for col in range(X.shape[0]):
+                u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
+                # need to check equation (devide by mean velocities???)
+                tke[row,col] = np.sqrt((1/len(urms))*np.sum(urms**2+vrms**2))
+
+        return X,Y,tke
