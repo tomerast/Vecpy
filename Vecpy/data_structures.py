@@ -208,7 +208,7 @@ class field:
             U_mesh_grid[row,col] = U[vec_ind]
             V_mesh_grid[row,col] = V[vec_ind]
         
-        return X_mesh_grid,Y_mesh_grid,U_mesh_grid,V_mesh_grid
+        return X_mesh_grid,Y_mesh_grid[::-1],U_mesh_grid[::-1],V_mesh_grid[::-1]
 
     def s2n_filter(self,threshold):
         XY = list(self.data.keys())
@@ -520,6 +520,28 @@ class run:
             V2 = V2 - Vmean2
 
             return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
+    
+    def corr_t(self,x,y,dframes,tau=None):
+        if tau is not None:
+            dframes = int(tau//float(self.fields[self.frames()[0]].properties.time_scale_to_seconds))
+        if self.gp_exists_all_frames(x,y):
+            Umean1,U1,Vmean1,V1 = self.mean_gp_velocity(x,y)
+            U2 = U1[dframes:]
+            V2 = V1[dframes:]
+            U1 = U1[:-dframes]
+            V1 = V1[:-dframes]
+            return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
+
+        else:
+            frames = self.gp_exists_all_frames(x,y)
+            U1,V1 = self.grid_point_velocity(x,y,frames)
+            U1 = U1 - np.nanmean(U1)
+            V1 = V1 - np.nanmean(V1)
+            U2 = U1[dframes:]
+            V2 = V1[dframes:]
+            U1 = U1[:-dframes]
+            V1 = V1[:-dframes]
+            return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
 
     def tke_frame(self,frame):
         X,Y = self.fields[frame].return_grid()
@@ -542,3 +564,57 @@ class run:
                 tke[row,col] = np.sqrt((1/len(urms))*np.sum(urms**2+vrms**2))
 
         return X,Y,tke
+
+
+
+#debug
+'''
+frame = 1
+dt = 0.001
+length_scale = 'pixel'
+length_to_meter = 0.00011946
+
+def create_syn_prop(dt,length_scale,length_to_meter):
+    global frame
+    vprop = vec_properties('Tomers algorithm','64x64','dt',str(dt),str(length_scale),str(length_to_meter))
+    cur_frame = (5-len(str(frame)))*str(0)+str(frame)
+    fprop = field_properties(cur_frame,frame*dt,'c:/user/user/....','Tomers algorithm','dt',str(dt),str(length_scale),str(length_to_meter))
+    frame+=1
+    return fprop,vprop
+
+
+def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None):
+    fprop,vprop = create_syn_prop(dt,length_scale,length_to_meter)
+    field1 = field(fprop)
+    if rand==True:
+        for i in range(number_of_vectors):
+            pixel_loc = np.random.randint(0,1920,2)
+            U = 5*(np.random.rand()-0.5)
+            V = 1*(np.random.rand()-0.5)
+            vec = vector(pixel_loc[0],pixel_loc[1],U,V,0,vprop)
+            field1.add_vec(vec)
+        return field1
+    else:
+        U = np.zeros((rows,cols))
+        V = np.zeros((rows,cols))
+        X,Y = np.meshgrid(np.linspace(xboundries[0],xboundries[1],cols),np.linspace(yboundries[0],yboundries[1],rows))
+        for row in range(rows):
+            for col in range(cols):
+                u = 5*(np.random.rand()-0.5)
+                v = 1*(np.random.rand()-0.5)
+                vec = vector(X[row,col],Y[row,col],u,v,0,vprop)
+                field1.add_vec(vec)
+        return field1
+
+def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None):
+    run1 = run('a')
+    for i in range(number_of_fields):
+        field1 = create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None)
+        run1.add_field(field1)
+    return run1
+
+
+run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand=None,number_of_vectors=None)
+run1.corr_t(0,0,0,0.005)        
+        
+'''
