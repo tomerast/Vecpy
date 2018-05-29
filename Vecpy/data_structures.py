@@ -2,7 +2,7 @@
 import numpy as np
 import scipy
 from scipy.stats import norm
-from scipy import io
+from scipy import io,signal
 import matplotlib.pyplot as plt
 from weighted_median import *
 
@@ -22,10 +22,9 @@ class vec_properties:
         print(
         'source: ',self.source,'\n',
         'window size: ',self.ws,'\n',
-        'dt: ',self.dt,'\n',
-        'pixel to meter: ',self.pixel_to_meter,'\n',
-        'velocity x units: ',self.vxunits,'\n',
-        'velocity y units: ',self.vyunits)
+        'dt: ',self.time_scale_to_seconds,'\n',
+        'pixel to meter: ',self.length_scale_to_meter,'\n',
+        'velocity units: ',self.velocity_units,'\n')
 
 
 class field_properties:
@@ -47,12 +46,10 @@ class field_properties:
         'absolute time: ',self.time,'\n',
         'images_path: ',self.images_path,'\n',
         'source: ',self.source,'\n',
-        'dt: ',self.dt,'\n',
-        'pixel to meter: ',self.pixel_to_meter,'\n',
-        'x units: ',self.xunits,'\n',
-        'y units: ',self.yunits,'\n',
-        'velocity x units: ',self.vxunits,'\n',
-        'velocity y units: ',self.vyunits)
+        'dt: ',self.time_scale_to_seconds,'\n',
+        'pixel to meter: ',self.length_scale_to_meter,'\n',
+        'length units: ',self.length_scale_to_meter,'\n',
+        'velocity units: ',self.velocity_units)
 
 class run_properties:
     pass
@@ -327,7 +324,18 @@ class field:
         self.filtered = self.data
         self.data = {}
         self.transfer(new_feild)
-        
+
+    def auto_spatial_correlation(self):
+        X,Y,U,V = self.create_mesh_grid()
+        Uc = scipy.signal.convolve2d(U,U[::-1])
+        Vc = scipy.signal.convolve2d(V,V[::-1])
+        Uc = Uc - Uc.min()
+        Vc = Vc - Vc.min()
+        s_cor = np.sqrt(Uc**2+Vc**2)
+        dX = X - np.mean(X[0,:])
+        dY = Y - np.mean(Y[:,0])
+        return dX,dY,s_cor
+
         
     
 class run:
@@ -543,6 +551,22 @@ class run:
             V1 = V1[:-dframes]
             return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
 
+    def spatial_corr(self,U1,V1,U2,V2):
+        Uc = scipy.signal.convolve2d(U1,U2[::-1])
+        Vc = scipy.signal.convolve2d(V1,V2[::-1])
+        Uc = Uc - Uc.min()
+        Vc = Vc - Vc.min()
+        s_cor = np.sqrt(Uc**2+Vc**2)
+        return s_cor
+
+    def auto_spatial_correlation(self,U,V):
+        return self.spatial_corr(U,V,U,V)
+
+    def time_spatial_corr(self,starting_frame=0):
+        frames = self.frames()[starting_frame:]
+        
+
+
     def tke_frame(self,frame):
         X,Y = self.fields[frame].return_grid()
         U,V = self.fields[frame].return_all_velocities()
@@ -568,7 +592,7 @@ class run:
 
 
 #debug
-'''
+
 frame = 1
 dt = 0.001
 length_scale = 'pixel'
@@ -583,10 +607,10 @@ def create_syn_prop(dt,length_scale,length_to_meter):
     return fprop,vprop
 
 
-def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None):
+def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None):
     fprop,vprop = create_syn_prop(dt,length_scale,length_to_meter)
     field1 = field(fprop)
-    if rand==True:
+    if rand_grid_loc==True:
         for i in range(number_of_vectors):
             pixel_loc = np.random.randint(0,1920,2)
             U = 5*(np.random.rand()-0.5)
@@ -606,15 +630,13 @@ def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_m
                 field1.add_vec(vec)
         return field1
 
-def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None):
+def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None):
     run1 = run('a')
     for i in range(number_of_fields):
-        field1 = create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand=None,number_of_vectors=None)
+        field1 = create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None)
         run1.add_field(field1)
     return run1
 
 
-run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand=None,number_of_vectors=None)
-run1.corr_t(0,0,0,0.005)        
+run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None)
         
-'''

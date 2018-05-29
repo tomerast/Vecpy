@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 from data_structures import  *
+from jobfile import *
 import os
 import yaml
 
@@ -34,8 +35,29 @@ def load_field1(X,Y,U,V,S2N,field_prop,vec_prop,source=None,ws=None,frame=None,t
     elif type(X) == list and type(Y) == list and type(U) == np.ndarray and type(V) == np.ndarray:
         X = np.array(X)
         Y = np.array(Y)
-
+    
     if field_prop is None or vec_prop is None:
+    
+        if source==None or source=='':
+            source = input("Algorithm source: ")
+        
+        if ws==None or ws == '' or ws == []:
+            ws_x = input("window size in the X direction: ")
+            ws_y = input("window size in the Y direction: ")
+            ws = [ws_x,ws_y]
+        
+        if frame==None or frame == '' or frame == []:
+            frame = input("Frame name: ")
+            
+        if images_path==None or images_path == '':
+            images_path = input("images directory: ")
+            
+        if time_scale_to_seconds==None or time_scale_to_seconds == '':
+            time_scale_to_seconds = input("dt in seconds: ")
+        
+        if length_scale_to_meter==None or length_scale_to_meter == '':
+            length_scale_to_meter = input("length scal to meter: ")
+        
         vec_prop,field_prop = field_data_properties(source,ws,frame,time,images_path,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter)
 
 
@@ -54,10 +76,10 @@ def parse_jobfile(jobfile):
         else:
             frame = [jobfile.frame_a,jobfile.frame_b]
     elif jobfile.pair_or_set.lower() == 'set':
-        frame = jobfile.frames
+        frame = jobfile.frame_name
     
     images_path = jobfile.images_path
-    time_unit = 'dt'
+    time_unit = jobfile.piv_paramters['dt']
     length_unit = 'pixel'
     time = ''
     time_scale_to_seconds = ''
@@ -99,13 +121,14 @@ def load_field_from_npz(file_name,path,field_prop,vec_prop):
 
     return field1
 
-def load_run_from_directory(directory_path):
+def load_run_from_directory(directory_path,type_ending):
     run1 = run('a')
-    files = [ fname for fname in os.listdir(directory_path) if fname.endswith('.npz')]
+    files = [ fname for fname in os.listdir(directory_path) if fname.endswith(type_ending+'.npz')]
     for file in files:
-        field1 = load_field_from_npz(file,directory_path,'','')
+        field1 = load_field_from_npz(file,directory_path,None,None)
         run1.add_field(field1)
     return run1
         
+run1 = load_run_from_directory(output_path,'[64, 64]')
 
     
