@@ -3,6 +3,7 @@ import numpy as np
 import scipy
 from scipy.stats import norm
 from scipy import io,signal
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from weighted_median import *
 
@@ -281,6 +282,32 @@ class field:
         Vdx,Vdy = np.gradient(V)
         
         return X,Y,Udx,Udy,Vdx,Vdy
+    
+    def vel_differntial(self):
+        def least_square_diff(field,grid,axis=0):
+            if axis==0:
+                shape = field.shape
+                dif = np.zeros(shape)
+                for row in range(shape[0]):
+                    for col in range(2,shape[1]-2):
+                        dif[row,col] = (2*field[row,col+2]+field[row,col+1]-field[row,col-1]-2*field[row,col-2])/10*(grid[row,col+1]-grid[row,col])
+                return dif
+                
+            elif axis==1:
+                shape = field.shape
+                dif = np.zeros(shape)
+                for row in range(2,shape[0]-2):
+                    for col in range(shape[1]):
+                        dif[row,col] = (2*field[row-2,col]+field[row-1,col]-field[row+1,col]-2*field[row+2,col])/10*(grid[row-1,col]-grid[row,col])
+                return dif
+                
+        X,Y,U,V = self.create_mesh_grid()
+        dU_x = least_square_diff(U,X)
+        dU_y = least_square_diff(U,Y,axis=1)
+        dV_x = least_square_diff(V,X)
+        dV_y = least_square_diff(V,Y,axis=1)
+        
+        return dU_x,dU_y,dV_x,dV_y
 
     def profile(self,axis='y'):
         X,Y,U,V = self.create_mesh_grid()
@@ -297,18 +324,72 @@ class field:
 
             return U_profile,V_profile,X_profile
     
-    def inverse_distance_interpolation(self,x,y,number_of_neighbors=4,radius=None,inverse_power=2):
-        if radius is not None:
-            indecies,distances = zip(*self.return_closest_neighbors_radius(x,y,radius))
-        else:
-            indecies,distances = zip(*self.return_n_closest_neighbors(x,y,n=4))
-        weights = np.array(distances)**-float(inverse_power)
-        neighbors_vel = [self.return_vel(ind[0],ind[1]) for ind in indecies]
-        inter_u = (np.multiply(np.array([v[0] for v in neighbors_vel]),weights)).sum() / weights.sum()
-        inter_v = (np.multiply(np.array([v[1] for v in neighbors_vel]),weights)).sum() / weights.sum()
+    def vorticity_field(self):
+        dU_x,dU_y,dV_x,dV_y = self.vel_differntial()
+        vort = dV_x-dU_y
+        return vort
+        
+    def inverse_distance_interpolation(self,x,y,number_of_neighbors=5,radius=None,inverse_power=2):
+        def weigted_velocity(neighbors_vels,weights):
+            weight_sum=0
+            weigted_vels=[]
+            for i in range(len(neighbors_vels)):
+                if not np.isnan(neighbors_vels[i]):
+                    weight_sum += weights[i]
+                    weigted_vels.append(weights[i]*neighbors_vels[i])
+            return np.nansum(weigted_vels)/weight_sum
 
-        return inter_u,inter_v
+        if self.check_if_grid_point_exists(x,y):
+            if radius is not None:
+                indecies,distances = zip(*self.return_closest_neighbors_radius(x,y,radius))
+            else:
+                indecies,distances = zip(*self.return_n_closest_neighbors(x,y,n=number_of_neighbors+1))
+            weights = list(np.array(distances[1:])**-float(inverse_power))
+            neighbors_vel = [self.return_vel(ind[0],ind[1]) for ind in indecies[1:]]
+
+            u_vels,v_vels = zip(*neighbors_vel)
+
+            inter_u = weigted_velocity(u_vels,weights)
+            inter_v = weigted_velocity(v_vels,weights)
+
+            return inter_u,inter_v
+        else:
+            if radius is not None:
+                indecies,distances = zip(*self.return_closest_neighbors_radius(x,y,radius))
+            else:
+                indecies,distances = zip(*self.return_n_closest_neighbors(x,y,n=number_of_neighbors))
+            weights = list(np.array(distances)**-float(inverse_power))
+            neighbors_vel = [self.return_vel(ind[0],ind[1]) for ind in indecies]
+            
+            u_vels,v_vels = zip(*neighbors_vel)
+
+            inter_u = weigted_velocity(u_vels,weights)
+            inter_v = weigted_velocity(v_vels,weights)
+
+            return inter_u,inter_v
     
+    def interpf(self):
+        X,Y = self.return_grid()
+        for ind in range(X.shape[0]):
+            pos = (X[ind],Y[ind])
+            u_cur,v_cur = self.return_vel(pos[0],pos[1])
+            if np.isnan(u_cur) and np.isnan(v_cur):
+                u_iter,v_iter = self.inverse_distance_interpolation(pos[0],pos[1])
+                vec = self.data[pos]
+                vec.U =  u_iter
+                vec.V =  v_iter
+                vec.properties.source = 'Interpolation'
+            elif np.isnan(u_cur):
+                u_iter,v_iter = self.inverse_distance_interpolation(pos[0],pos[1])
+                vec = self.data[pos]
+                vec.U =  u_iter
+                vec.properties.source = 'Interpolation'
+            elif np.isnan(v_cur):
+                u_iter,v_iter = self.inverse_distance_interpolation(pos[0],pos[1])
+                vec = self.data[pos]
+                vec.V =  v_iter
+                vec.properties.source = 'Interpolation'
+            
     def remap(self,X,Y):
         new_feild = field(self.properties)
         X = X.flatten()
@@ -336,8 +417,7 @@ class field:
         dY = Y - np.mean(Y[:,0])
         return dX,dY,s_cor
 
-        
-    
+
 class run:
     def __init__(self,run_properties):  
         self.fields = {}
@@ -354,7 +434,24 @@ class run:
             del self.fields[field.properties.frame]
         else:
             del self.fields[frame]
+
+    def remap_run(self,X,Y):
+        frames = self.frames()
+        for frame in frames:
+            self.fields[frame].remap(X,Y)
     
+    def check_same_grid_run(self):
+        frames = self.frames()
+        base_frame = frames[0]
+        for frame in frames:
+            X_base,Y_base = self.fields[base_frame].return_grid()
+            X_check,Y_check = self.fields[frame].return_grid()
+            if all(X_base == X_check) and all(Y_base == Y_check):
+                base_frame = frame
+            else:
+                return False
+        return True
+
     def gp_exists_all_frames(self,x,y):
         frames = self.frames()
         gp_exists = [self.fields[f].check_if_grid_point_exists(x,y) for f in frames]
@@ -439,17 +536,30 @@ class run:
         return U_mean,U_rms,V_mean,V_rms
 
     def run_mean_velocities(self):
-        X,Y = self.run_grid()
-        U_mean = np.zeros(X.shape)
-        V_mean = np.zeros(Y.shape)
-        for row in range(X.shape[0]):
-            for col in range(X.shape[0]):
-                u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
-                U_mean[row,col] = u
-                V_mean[row,col] = v
+        if self.check_same_grid_run():
+            X,Y = self.run_grid()
+            frames = self.frames()
+            shape = (X.shape[0],X.shape[1],len(frames))
+            U_mean = np.zeros(shape)
+            V_mean = np.zeros(shape)
+            for ind in range(len(frames)):                
+                x,y,u,v = self.fields[frames[ind]].create_mesh_grid()
+                U_mean[:,:,ind] = u[::-1]
+                V_mean[:,:,ind] = v[::-1]
+            return np.nanmean(U_mean,axis=2),np.nanmean(V_mean,axis=2)
+        else:
+            X,Y = self.run_grid()
+            U_mean = np.zeros(X.shape)
+            V_mean = np.zeros(Y.shape)
+            for row in range(X.shape[0]):
+                for col in range(X.shape[0]):
+                    u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
+                    U_mean[row,col] = u
+                    V_mean[row,col] = v
 
-        return U_mean,V_mean
-
+            return U_mean,V_mean
+        
+        
     def mean_profile(self,axis='y'):
         frames = self.frames()
         if axis=='y' or axis=='Y':
@@ -563,9 +673,22 @@ class run:
         return self.spatial_corr(U,V,U,V)
 
     def time_spatial_corr(self,starting_frame=0):
-        frames = self.frames()[starting_frame:]
-        
+        if self.check_same_grid_run():
+            frames = self.frames()[starting_frame:]
+            X,Y,U_base,V_base = self.fields[frames[0]].create_mesh_grid()
+            dx,dy,s_corr = self.fields[frames[0]].auto_spatial_correlation()
+            ts_corr = np.zeros((s_corr.shape[0],s_corr.shape[1],len(frames)))
+            ts_corr[:,:,0] = s_corr
+            for ind in range(1,len(frames)):
+                X,Y,U_t,V_t = self.fields[frames[ind]].create_mesh_grid()
+                s_cor = self.spatial_corr(U_base,V_base,U_t,V_t)
+                ts_corr[:,:,ind] = s_cor
+            
+            return dx,dy,ts_corr
 
+        else:
+            print('The grid is not constant')
+        
 
     def tke_frame(self,frame):
         X,Y = self.fields[frame].return_grid()
@@ -591,8 +714,9 @@ class run:
 
 
 
-#debug
 
+#debug
+'''
 frame = 1
 dt = 0.001
 length_scale = 'pixel'
@@ -607,15 +731,16 @@ def create_syn_prop(dt,length_scale,length_to_meter):
     return fprop,vprop
 
 
-def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None):
+def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=False,number_of_vectors=None):
     fprop,vprop = create_syn_prop(dt,length_scale,length_to_meter)
     field1 = field(fprop)
     if rand_grid_loc==True:
         for i in range(number_of_vectors):
-            pixel_loc = np.random.randint(0,1920,2)
+            rand_x_pixel_loc = np.random.randint(xboundries[0],xboundries[1])
+            rand_y_pixel_loc = np.random.randint(yboundries[0],yboundries[1])
             U = 5*(np.random.rand()-0.5)
             V = 1*(np.random.rand()-0.5)
-            vec = vector(pixel_loc[0],pixel_loc[1],U,V,0,vprop)
+            vec = vector(rand_x_pixel_loc,rand_y_pixel_loc,U,V,0,vprop)
             field1.add_vec(vec)
         return field1
     else:
@@ -630,13 +755,17 @@ def create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_m
                 field1.add_vec(vec)
         return field1
 
-def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None):
+def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=False,number_of_vectors=None):
     run1 = run('a')
     for i in range(number_of_fields):
-        field1 = create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None)
+        field1 = create_syn_field(rows,cols,xboundries,yboundries,dt,length_scale,length_to_meter,rand_grid_loc,number_of_vectors)
         run1.add_field(field1)
     return run1
 
 
-run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand_grid_loc=None,number_of_vectors=None)
-        
+run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand_grid_loc=False,number_of_vectors=None)
+
+field1 = run1.fields[run1.frames()[0]]
+'''
+a,b = field1.inverse_distance_interpolation(2368,1824)
+
