@@ -6,25 +6,33 @@ import numpy as np
 #General
 def quiver(X,Y,U,V,title,units):
     plt.figure()
-    plt.title(title)
+    plt.title(title,size=20)
     Q = plt.quiver(X,Y,U,V,np.sqrt(U**2+V**2),angles='xy',cmap='autumn')
     qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
     plt.show()
 
+def quiver_profile(grid_points,vel,title,units):
+    plt.figure()
+    plt.title(title,size=20)
+    second_axis = np.zeros(grid_points.shape)
+    Q = plt.quiver(second_axis,grid_points,vel,vel,width=0.0023,headwidth=3,headlength=5,angles='xy')
+    qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
+    plt.show()
+    
+
 def contour(X,Y,Values,title):
     plt.figure()
-    plt.title(title)
+    plt.title(title,size=20)
     cont = plt.contourf(X,Y,Values)
     plt.colorbar()
     plt.xlabel('')
     plt.ylabel('')
     plt.show()
-    
     return cont
 
 def plot(Data,grid,title,labels):
     plt.figure()
-    plt.title(title,size=25)
+    plt.title(title,size=20)
     plt.plot(Data , grid, 'o-' )
     plt.xlabel(labels[0],size=15)
     plt.ylabel(labels[1],size=15)
@@ -76,7 +84,6 @@ def mean_run_profile(run,axis='y'):
     v_units = run.fields[run.frames()[0]].properties.velocity_units
     l_units = run.fields[run.frames()[0]].properties.length_unit
     plot(U_mean_profile , grid_points_agp,'Mean run plot in the '+axis+' direction',[r'$\bar{u}$ '+v_units,l_units])
-    
 
 
 def run_vorticity_animation(run):
@@ -121,7 +128,63 @@ def mean_reynolds_stress(run,direction='xy'):
 def mean_run_quiver(run):
     X,Y = run.run_grid()
     U,V = run.run_mean_velocities()
-    title = 'Quiver of mean velocity over all frames'
+    title = 'Mean velocity field over all frames'
     units = run.fields[run.frames()[0]].properties.velocity_units
     quiver(X,Y,U,V,title,units)
+    
+def mean_run_quiver_profile(run,loc_per,axis='y'):
+    X,Y = run.run_grid()
+    U,V = run.run_mean_velocities()
+    if axis=='x':
+        border = int(X.shape[0]*(loc_per/100))
+        grid_points= X[border,:]
+        V_prof = np.nanmean(V[border-1:border+2,:],axis=0)
+        title = 'Mean velocity porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        units = run.fields[run.frames()[0]].properties.velocity_units
+        quiver_profile(grid_points,V_prof,title,units)
+    else:
+        border = int(Y.shape[1]*(loc_per/100))
+        grid_points= Y[:,border]
+        U_prof = np.nanmean(U[:,border-1:border+2],axis=1)
+        title = 'Mean velocity porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        units = run.fields[run.frames()[0]].properties.velocity_units
+        quiver_profile(grid_points,U_prof,title,units)
 
+def mean_vorticity_profile(run,loc_per,axis='y'):
+    X,Y = run.run_grid()
+    X=X[2:-2,2:-2]
+    Y=Y[2:-2,2:-2]
+    W = run.run_vorticity_field()
+    if axis=='x':
+        border = int(X.shape[0]*(loc_per/100))
+        grid_points= X[border,:]
+        W_prof = np.nanmean(W[border-1:border+2,:],axis=0)
+        title = 'Mean vorticity porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        l_units = run.fields[run.frames()[0]].properties.length_unit
+        plot(grid_points,W_prof,title,(l_units,'vorticity'))
+    else:
+        border = int(Y.shape[1]*(loc_per/100))
+        grid_points= Y[:,border]
+        W_prof = np.nanmean(W[:,border-1:border+2],axis=1)
+        title = 'Mean vorticity porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        l_units = run.fields[run.frames()[0]].properties.length_unit
+        plot(W_prof,grid_points,title,('vorticity',l_units))
+
+
+def mean_reynolds_stress_profile(run,loc_per,axis='y'):
+    X,Y = run.run_grid()
+    r_stress = run.run_reynolds_stress()
+    if axis=='x':
+        border = int(X.shape[0]*(loc_per/100))
+        grid_points= X[border,:]
+        r_stress_prof = np.nanmean(r_stress[border-1:border+2,:],axis=0)
+        title = 'Mean Reynolds stress porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        l_units = run.fields[run.frames()[0]].properties.length_unit
+        plot(grid_points,r_stress_prof,title,(l_units,'Reynold Stress'))
+    else:
+        border = int(Y.shape[1]*(loc_per/100))
+        grid_points= Y[:,border]
+        r_stress_prof = np.nanmean(r_stress[:,border-1:border+2],axis=1)
+        title = 'Mean Reynolds stress porfile in the '+axis+' direction over all frames at '+str(loc_per)+'% of area'
+        l_units = run.fields[run.frames()[0]].properties.length_unit
+        plot(r_stress_prof,grid_points,title,('Reynold Stress',l_units))
