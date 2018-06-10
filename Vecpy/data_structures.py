@@ -699,6 +699,10 @@ class run:
             return np.inner(U1, U2)/(np.sqrt(np.inner(U1, U1)*np.inner(U2, U2))) , np.inner(V1, V2)/(np.sqrt(np.inner(V1, V1)*np.inner(V2, V2)))
 
     def spatial_corr(self,U1,V1,U2,V2):
+        U1 = np.nan_to_num(U1)
+        V1 = np.nan_to_num(V1)
+        U2 = np.nan_to_num(U2)
+        V2 = np.nan_to_num(V2)
         Uc = scipy.signal.convolve2d(U1,U2[::-1])
         Vc = scipy.signal.convolve2d(V1,V2[::-1])
         Uc = Uc - Uc.min()
@@ -707,17 +711,24 @@ class run:
         return s_cor
 
     def auto_spatial_correlation(self,U,V):
-        return self.spatial_corr(U,V,U,V)
+        U_mean,V_mean = self.run_mean_velocities()
+        U_fluc = U-U_mean
+        V_fluc = V-V_mean
+        return self.spatial_corr(U_fluc,V_fluc,U_fluc,V_fluc)
 
     def time_spatial_corr(self,starting_frame=0):
         if self.check_same_grid_run():
             frames = self.frames()[starting_frame:]
+            U_mean,V_mean = self.run_mean_velocities()
             X,Y,U_base,V_base = self.fields[frames[0]].create_mesh_grid()
+            U_base -= U_mean
+            V_base -= V_mean
             dx,dy,s_corr = self.fields[frames[0]].auto_spatial_correlation()
             ts_corr = np.zeros((s_corr.shape[0],s_corr.shape[1],len(frames)))
-            ts_corr[:,:,0] = s_corr
-            for ind in range(1,len(frames)):
+            for ind in range(len(frames)):
                 X,Y,U_t,V_t = self.fields[frames[ind]].create_mesh_grid()
+                U_t -= U_mean
+                V_t -= V_mean
                 s_cor = self.spatial_corr(U_base,V_base,U_t,V_t)
                 ts_corr[:,:,ind] = s_cor
             
@@ -764,10 +775,11 @@ class run:
         return X,Y,tke
 
 
-
+dx,dy,ts_corr = run1.time_spatial_corr()
 
 #debug
 '''
+=
 frame = 1
 dt = 0.001
 length_scale = 'pixel'
