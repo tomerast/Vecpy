@@ -79,10 +79,10 @@ def parse_jobfile(jobfile):
         frame = jobfile.frame_name
     
     images_path = jobfile.images_path
-    time_unit = jobfile.piv_paramters['dt']
+    time_unit = 'dt'
+    time_scale_to_seconds = jobfile.piv_paramters['dt']
     length_unit = 'pixel'
     time = ''
-    time_scale_to_seconds = ''
     length_scale_to_meter=''
 
     return field_data_properties(source,ws,frame,time,images_path,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter)

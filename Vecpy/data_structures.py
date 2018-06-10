@@ -327,7 +327,7 @@ class field:
     def vorticity_field(self):
         dU_x,dU_y,dV_x,dV_y = self.vel_differntial()
         vort = dV_x-dU_y
-        return vort
+        return vort[2:-2,2:-2]
         
     def inverse_distance_interpolation(self,x,y,number_of_neighbors=5,radius=None,inverse_power=2):
         def weigted_velocity(neighbors_vels,weights):
@@ -390,11 +390,16 @@ class field:
                 vec.V =  v_iter
                 vec.properties.source = 'Interpolation'
             
-    def remap(self,X,Y):
+    def remap(self,X,Y,shape_of_new_grid=None):
         new_feild = field(self.properties)
-        X = X.flatten()
-        Y = Y.flatten()
         Xold,Yold = self.return_grid()
+        if shape_of_new_grid==None:
+            X = X.flatten()
+            Y = Y.flatten()
+        else:
+            X,Y = np.meshgrid(np.linspace(Xold.min(),Xold.max(),shape_of_new_grid[1]),np.linspace(Yold.min(),Yold.max(),shape_of_new_grid[0]))
+            X = X.flatten()
+            Y = Y.flatten()
         vec_properties = self.data[Xold[0],Yold[0]].properties
         vec_properties.source = 'Interpolation'
         for ind in range(len(X)):
@@ -435,10 +440,10 @@ class run:
         else:
             del self.fields[frame]
 
-    def remap_run(self,X,Y):
+    def remap_run(self,X,Y,shape_of_new_grid=None):
         frames = self.frames()
         for frame in frames:
-            self.fields[frame].remap(X,Y)
+            self.fields[frame].remap(X,Y,shape_of_new_grid)
     
     def check_same_grid_run(self):
         frames = self.frames()
@@ -452,7 +457,7 @@ class run:
                 return False
         return True
 
-    def gp_exists_all_frames(self,x,y):
+    def gp_exists_all_frames(self,x,y,show_missing_frames=False):
         frames = self.frames()
         gp_exists = [self.fields[f].check_if_grid_point_exists(x,y) for f in frames]
         if all(gp_exists):
@@ -460,7 +465,9 @@ class run:
         else:
             no_gp_frames = [x for x, y in zip(frames, gp_exists) if y == False]
             frames_with_gp = [x for x, y in zip(frames, gp_exists) if y == True]
-            print('Frames without the requested grid point ','(',x,',',y,')',': ',no_gp_frames)
+            #allows checking of misssing grid point frames
+            if show_missing_frames:
+                print('Frames without the requested grid point ','(',x,',',y,')',': ',no_gp_frames)
             return frames_with_gp
 
     def run_grid(self):
@@ -552,13 +559,43 @@ class run:
             U_mean = np.zeros(X.shape)
             V_mean = np.zeros(Y.shape)
             for row in range(X.shape[0]):
-                for col in range(X.shape[0]):
+                for col in range(X.shape[1]):
                     u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
                     U_mean[row,col] = u
                     V_mean[row,col] = v
 
             return U_mean,V_mean
-        
+    
+    def run_reynolds_stress(self,direction='xy'):
+        X,Y = self.run_grid()
+        rstress = np.zeros(X.shape)
+        for row in range(X.shape[0]):
+            for col in range(X.shape[1]):
+                #check equation - do you need to multiply by density??
+                u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
+                if direction=='xy' or direction=='yx':
+                    rstress[row,col] = np.nanmean(np.multiply(urms,vrms))
+                elif direction=='xx':
+                    rstress[row,col] = np.nanmean(np.multiply(urms,urms))
+                elif direction=='yy':
+                    rstress[row,col] = np.nanmean(np.multiply(vrms,vrms))
+        return rstress
+
+    def frame_reynolds_stress(self,frame,direction='xy'):
+        X,Y,U,V = self.fields[frame].create_mesh_grid()
+        rstress = np.zeros(X.shape)
+        for row in range(X.shape[0]):
+            for col in range(X.shape[1]):
+                #check equation - do you need to multiply by density??
+                u,urms,v,vrms = self.mean_gp_velocity(X[row,col],Y[row,col])
+                if direction=='xy' or direction=='yx':
+                    rstress[row,col] = (U[row,col] - u)*(V[row,col] - v)
+                elif direction=='xx':
+                    rstress[row,col] = (U[row,col] - u)**2
+                elif direction=='yy':
+                    rstress[row,col] = (V[row,col] - v)**2
+        return rstress
+
         
     def mean_profile(self,axis='y'):
         frames = self.frames()
@@ -689,7 +726,21 @@ class run:
         else:
             print('The grid is not constant')
         
+    def run_vorticity_field(self):
+        if self.check_same_grid_run():
+            frames = self.frames()
+            w0 = self.fields[frames[0]].vorticity_field()
+            shape = (w0.shape[0],w0.shape[1],len(frames))
+            vort_mean = np.zeros(shape)
+            vort_mean[:,:,0] = w0
+            for ind in range(1,len(frames)):                
+                w = self.fields[frames[ind]].vorticity_field()
+                vort_mean[:,:,ind] = w
+            return np.nanmean(vort_mean,axis=2)
+        else:
+            print('The grid is not constant')
 
+    
     def tke_frame(self,frame):
         X,Y = self.fields[frame].return_grid()
         U,V = self.fields[frame].return_all_velocities()
@@ -765,7 +816,4 @@ def create_syn_run(number_of_fields,rows,cols,xboundries,yboundries,dt,length_sc
 
 run1 = create_syn_run(200,30,30,[0,1920],[0,1920],dt,length_scale,length_to_meter,rand_grid_loc=False,number_of_vectors=None)
 
-field1 = run1.fields[run1.frames()[0]]
 '''
-a,b = field1.inverse_distance_interpolation(2368,1824)
-
