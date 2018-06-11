@@ -1,9 +1,10 @@
+import os
 import numpy as np
 import scipy
 from data_structures import  *
-from jobfile import *
+if 'jobfile.py' in os.listdir():
+    from jobfile import *
 from read_vec_file import *
-import os
 import yaml
 
 def check_str_bool(s):
@@ -66,7 +67,7 @@ def load_field1(X,Y,U,V,S2N,field_prop,vec_prop,source=None,ws=None,frame=None,t
             time_scale_to_seconds = float(input("dt in seconds: "))
         
         if length_scale_to_meter==None or length_scale_to_meter == '':
-            length_scale_to_meter = float(input("length scal to meter: "))
+            length_scale_to_meter = float(input("length scale to meter: "))
         
         vec_prop,field_prop = field_data_properties(source,ws,frame,time,images_path,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter)
 
@@ -141,7 +142,7 @@ def load_field_from_vec(file_name,path,field_prop=None,vec_prop=None):
         field1 = load_field1(X,Y,U,V,None,field_prop,vec_prop)
     return field1
 
-def load_field_from_npz(file_name,path,field_prop,vec_prop):
+def load_field_from_npz(file_name,path,field_prop=None,vec_prop=None):
     file_name = str(file_name)
     if file_name.endswith('.npz'):
         data  = np.load(path+file_name)
@@ -206,10 +207,4 @@ def load_vec_run_from_directory(directory_path,type_ending):
             run1.add_field(field1)
         return run1
         
-    
-    
-run1 = load_vec_run_from_directory(path,'')
-'''      
-run1 = load_run_from_directory(output_path,'[64, 64]')
-'''
     
