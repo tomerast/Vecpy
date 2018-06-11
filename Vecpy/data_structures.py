@@ -775,8 +775,6 @@ class run:
         return X,Y,tke
 
 
-dx,dy,ts_corr = run1.time_spatial_corr()
-
 #debug
 '''
 =
