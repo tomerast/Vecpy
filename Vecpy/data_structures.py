@@ -290,7 +290,11 @@ class field:
                 dif = np.zeros(shape)
                 for row in range(shape[0]):
                     for col in range(2,shape[1]-2):
-                        dif[row,col] = (2*field[row,col+2]+field[row,col+1]-field[row,col-1]-2*field[row,col-2])/10*(grid[row,col+1]-grid[row,col])
+                        rs = 2*field[row,col+2]+field[row,col+1]
+                        ls = -field[row,col-1]-2*field[row,col-2]
+                        dis = 10*(grid[row,col+1]-grid[row,col])
+                        dif[row,col] = (rs+ls)/dis
+                        #dif[row,col] = (2*field[row,col+2]+field[row,col+1]-field[row,col-1]-2*field[row,col-2])/10*(grid[row,col+1]-grid[row,col])
                 return dif
                 
             elif axis==1:
@@ -298,7 +302,11 @@ class field:
                 dif = np.zeros(shape)
                 for row in range(2,shape[0]-2):
                     for col in range(shape[1]):
-                        dif[row,col] = (2*field[row-2,col]+field[row-1,col]-field[row+1,col]-2*field[row+2,col])/10*(grid[row-1,col]-grid[row,col])
+                        us = 2*field[row-2,col]+field[row-1,col]
+                        ds = -field[row+1,col]-2*field[row+2,col]
+                        dis = 10*(grid[row-1,col]-grid[row,col])
+                        dif[row,col] = (us+ds)/dis
+                        #dif[row,col] = (2*field[row-2,col]+field[row-1,col]-field[row+1,col]-2*field[row+2,col])/10*(grid[row-1,col]-grid[row,col])
                 return dif
                 
         X,Y,U,V = self.create_mesh_grid()
@@ -508,6 +516,12 @@ class run:
             U = np.array(U)
             V = np.array(V)
             return U,V
+    
+    def return_field(self,number_of_field,name_of_frame=None):
+        if name_of_frame is not None:
+            return self.fields[name_of_frame]
+        else:
+            return self.fields[self.frames()[number_of_field]]
 
     def mean_gp_velocity(self,x,y):
         for_all_frames = self.gp_exists_all_frames(x,y)
@@ -740,6 +754,9 @@ class run:
     def run_vorticity_field(self):
         if self.check_same_grid_run():
             frames = self.frames()
+            X,Y,U,V = self.fields[frames[0]].create_mesh_grid()
+            X=X[2:-2,2:-2]
+            Y=Y[2:-2,2:-2]
             w0 = self.fields[frames[0]].vorticity_field()
             shape = (w0.shape[0],w0.shape[1],len(frames))
             vort_mean = np.zeros(shape)
@@ -747,7 +764,7 @@ class run:
             for ind in range(1,len(frames)):                
                 w = self.fields[frames[ind]].vorticity_field()
                 vort_mean[:,:,ind] = w
-            return np.nanmean(vort_mean,axis=2)
+            return X,Y,np.nanmean(vort_mean,axis=2)
         else:
             print('The grid is not constant')
 
@@ -773,7 +790,6 @@ class run:
                 tke[row,col] = np.sqrt((1/len(urms))*np.sum(urms**2+vrms**2))
 
         return X,Y,tke
-
 
 #debug
 '''
