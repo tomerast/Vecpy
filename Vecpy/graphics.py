@@ -114,10 +114,7 @@ def run_vorticity_animation(run):
     return anim,W
  
 def mean_run_vorticity(run):
-    X,Y = run.run_grid()
-    X=X[2:-2,2:-2]
-    Y=Y[2:-2,2:-2]
-    W = run.run_vorticity_field()
+    X,Y,W = run.run_vorticity_field()
     contour(X,Y,W,'Mean run vorticity field')
 
 def mean_reynolds_stress(run,direction='xy'):
@@ -151,10 +148,7 @@ def mean_run_quiver_profile(run,loc_per,axis='y'):
         quiver_profile(grid_points,U_prof,title,units)
 
 def mean_vorticity_profile(run,loc_per,axis='y'):
-    X,Y = run.run_grid()
-    X=X[2:-2,2:-2]
-    Y=Y[2:-2,2:-2]
-    W = run.run_vorticity_field()
+    X,Y,W = run.run_vorticity_field()
     if axis=='x':
         border = int(X.shape[0]*(loc_per/100))
         grid_points= X[border,:]
