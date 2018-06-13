@@ -7,7 +7,7 @@ import numpy as np
 def quiver(X,Y,U,V,title,units):
     plt.figure()
     plt.title(title,size=20)
-    Q = plt.quiver(X,Y,U,V,np.sqrt(U**2+V**2),angles='xy',cmap='autumn')
+    Q = plt.quiver(X,Y,U,V,np.sqrt(U**2+V**2),width=0.0023,headwidth=3,headlength=5,angles='xy',cmap='autumn')
     qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
     plt.show()
 
