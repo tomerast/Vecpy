@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import yaml
+import run_jobfile
 
 class jobfile:
     def __init__(self,images_path,pair_or_set,images_type,frames,window_size=[64,64],search_area_size=[128,128],overlap_per=50,dt=1,corr_type='fft',pre=None,post=None):
@@ -60,7 +61,7 @@ class jobfile:
         for preprop in self.piv_paramters['preprocess']:
             if str(preprop) == 'gausian_filter':
                 print('cool')
-            elif str(preprop) == 'wind_tunnel_mask':
+            elif str(preprop) == 'wind_tunnel_mask2':
                 self.piv_paramters['preprocess_parameters']['wind_tunnel_mask'] = {}
                 same = input("Use same percentile for both images: ")
                 if same == True or same == 'True' or str.lower(same)=='yes':
@@ -92,16 +93,33 @@ class jobfile:
 
             
     
-'''        
-images_path = '/Users/User/Documents/University/Masters/Turb_Lab/wind tunnel data/Run10/'
-output_path = '/Users/User/Documents/University/Masters/Turb_Lab/wind tunnel data/Run10/output1/'
+'''
+images_path = '/Users/User/Documents/University/Masters/Turb_Lab/PIV/PIV_challenge/2005/C/'
+output_path = '/Users/User/Documents/University/Masters/Turb_Lab/PIV/PIV_challenge/2005/C/output1/'
 pair_or_set = 'set'
+images_type = 'bmp'
 frames = ''
 corr_type='fft'
-window_size = [98,48]
-search_area_size = [2*98,2*48]
+window_size = [32,32]
+search_area_size = [64,64]
 overlap_per = 50
-dt = 0.001
+dt = 1
+pixel_to_meter = 1
+job1 = jobfile(images_path,pair_or_set,images_type,frames,window_size=window_size,search_area_size=search_area_size)
+run_jobfile.run_jobfile(job1,output_path)
 
-run_jobfile(job1,output_path)
+     
+images_path = '/Users/User/Documents/University/Masters/Turb_Lab/wind_tunnel_data/Run3/'
+output_path = '/Users/User/Documents/University/Masters/Turb_Lab/wind_tunnel_data/Run3/output_28_06_18/'
+pair_or_set = 'set'
+images_type = 'im7'
+frames = ''
+corr_type='fft'
+window_size = [64,64]
+search_area_size = [128,128]
+overlap_per = 50
+dt = 0.0005
+pixel_to_meter = 0.000118689
+job1 = jobfile(images_path,pair_or_set,images_type,frames,pre=['wind_tunnel_mask'],post=['max_mag_outlier'])
+run_jobfile.run_jobfile(job1,output_path)
 '''

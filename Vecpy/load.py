@@ -164,7 +164,7 @@ def load_field_from_npz(file_name,path,field_prop=None,vec_prop=None):
     return field1
 
 def load_npz_run_from_directory(directory_path,type_ending):
-    run1 = run('Run file loaded from npz files in directory: '+directory_path)
+    run1 = run()
     files = [ fname for fname in os.listdir(directory_path) if fname.endswith(type_ending+'.npz')]
     for file in files:
         field1 = load_field_from_npz(file,directory_path,None,None)
@@ -172,7 +172,7 @@ def load_npz_run_from_directory(directory_path,type_ending):
     return run1
 
 def load_vec_run_from_directory(directory_path,type_ending):
-    run1 = run('Run file loaded from vec files in directory: '+directory_path)
+    run1 = run()
     files = [ fname for fname in os.listdir(directory_path) if fname.endswith(type_ending+'.vec')]
     run_input = check_str_bool(input('Do you want to input parameters of run?'))
     con_run = check_str_bool(input('Are the parameters of the run constant?'))
@@ -207,4 +207,3 @@ def load_vec_run_from_directory(directory_path,type_ending):
             run1.add_field(field1)
         return run1
         
-    

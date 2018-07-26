@@ -5,11 +5,15 @@ import numpy as np
 
 #General
 def quiver(X,Y,U,V,title,units):
-    plt.figure()
-    plt.title(title,size=20)
-    Q = plt.quiver(X,Y,U,V,np.sqrt(U**2+V**2),width=0.0023,headwidth=3,headlength=5,angles='xy',cmap='autumn')
-    qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
+    Q = plt.figure()
+    plt.title(title,size=30)
+    ax1 = plt.quiver(X,Y,U,V,np.sqrt(U**2+V**2),angles='xy',cmap='coolwarm',scale=1e2,width=0.0009,headwidth=6,headlength=7)
+    qk = plt.quiverkey(ax1, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
+    plt.colorbar()
+    plt.xlabel('meter',size=20)
+    plt.ylabel('meter',size=20)
     plt.show()
+    return Q
 
 def quiver_profile(grid_points,vel,title,units):
     plt.figure()
@@ -19,7 +23,7 @@ def quiver_profile(grid_points,vel,title,units):
     qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'1 '+units, labelpos='E',coordinates='figure')
     plt.show()
     
-
+    
 def contour(X,Y,Values,title):
     plt.figure()
     plt.title(title,size=20)
@@ -31,7 +35,7 @@ def contour(X,Y,Values,title):
     return cont
 
 def plot(Data,grid,title,labels):
-    plt.figure()
+    #plt.figure()
     plt.title(title,size=20)
     plt.plot(Data , grid, 'o-' )
     plt.xlabel(labels[0],size=15)
@@ -113,9 +117,9 @@ def run_vorticity_animation(run):
     plt.show()
     return anim,W
  
-def mean_run_vorticity(run):
+def mean_run_vorticity(run,square=1):
     X,Y,W = run.run_vorticity_field()
-    contour(X,Y,W,'Mean run vorticity field')
+    contour(X,Y,W**square,'Mean run vorticity field')
 
 def mean_reynolds_stress(run,direction='xy'):
     X,Y = run.run_grid()
@@ -125,7 +129,9 @@ def mean_reynolds_stress(run,direction='xy'):
 def mean_run_quiver(run):
     X,Y = run.run_grid()
     U,V = run.run_mean_velocities()
-    title = 'Mean velocity field over all frames'
+    U[U>2.5]=np.nan
+    
+    title = 'Mean velocity (U_wind = 2.5 m/s)'
     units = run.fields[run.frames()[0]].properties.velocity_units
     quiver(X,Y,U,V,title,units)
     

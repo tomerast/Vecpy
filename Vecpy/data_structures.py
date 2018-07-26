@@ -1,5 +1,6 @@
 
 import numpy as np
+import copy
 import scipy
 from scipy.stats import norm
 from scipy import io,signal
@@ -7,6 +8,8 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from weighted_median import *
 
+def check_str_bool(s):
+    return s in ['True' ,'true', '1', 't', 'y','YES' ,'Yes','yes', 'yeah','Yeah', 'yup', 'certainly', 'uh-huh']
 
 class vec_properties:
     def __init__(self,source,ws,time_unit,time_scale_to_seconds,length_unit,length_scale_to_meter):
@@ -65,8 +68,8 @@ class vector:
         self.properties = properties
     
     def convert_units(self,output_length_unit,output_time_unit):
-        LS = {'mm':0.001, 'cm':0.01, 'm':1.0,'meter':1.0, 'km':1000.}
-        TS = {'ms':0.001, 's':1.0,'second':1.0, 'min':60.,'h':3600.,'hour':3600.}
+        LS = {'mm':0.001, 'cm':0.01, 'm':1.0,'meter':1.0,'meters':1.0, 'km':1000.}
+        TS = {'ms':0.001, 's':1.0,'second':1.0,'seconds':1.0, 'min':60.,'mins':60.,'h':3600.,'hour':3600.,'hours':3600.}
         LS[self.properties.length_unit]=float(self.properties.length_scale_to_meter)
         TS[self.properties.time_unit]=float(self.properties.time_scale_to_seconds)
         
@@ -76,13 +79,13 @@ class vector:
         self.U = self.U*(LS[self.properties.length_unit]/LS[output_length_unit])*(TS[output_time_unit]/TS[self.properties.time_unit])
         self.V = self.V*(LS[self.properties.length_unit]/LS[output_length_unit])*(TS[output_time_unit]/TS[self.properties.time_unit])
         
-        self.properties.lenght_unit = output_length_unit
+        self.properties.length_unit = output_length_unit
         self.properties.length_scale_to_meter = LS[output_length_unit]
         self.properties.time_unit = output_time_unit
         self.properties.time_scale_to_seconds = TS[output_time_unit]
         self.properties.velocity_units = output_length_unit+'/'+output_time_unit
     
-
+    
 class field:
     def __init__(self,field_properties):  
         self.data = {}
@@ -92,7 +95,7 @@ class field:
 
     def __add__(self,other):
         check_list = []
-        check_list.append(self.properties.lenght_unit == other.properties.lenght_unit)
+        check_list.append(self.properties.length_unit == other.properties.length_unit)
         check_list.append(self.properties.length_scale_to_meter == other.properties.length_scale_to_meter)
         check_list.append(self.properties.time_unit == other.properties.time_unit)
         check_list.append(self.properties.time_scale_to_seconds == other.properties.time_scale_to_seconds)
@@ -124,23 +127,42 @@ class field:
         return (x,y) in xy
         
     def move_to_filtered(self,vector):
-        self.filtered[vector.X,vector.Y] = vector
-        self.remove_vec(0,0,vector)
+        self.filtered[vector.X,vector.Y] = copy.deepcopy(vector)
+        vector.U = np.nan
+        vector.V = np.nan
+        vector.properties.source = 'filtered'
 
     def transfer(self,other):
         for xy in list(other.data.keys()):
             self.add_vec(other.data[xy])
     
-    def convert_field_units(self,output_length_unit,output_time_unit):    
+    def convert_field_units(self,output_length_unit,output_time_unit):
         XY = list(self.data.keys())
+        
+        if self.properties.length_unit == None or self.properties.length_unit == '':
+            self.properties.length_unit = str(input('field length units'))    
+        if self.properties.length_scale_to_meter== None or self.properties.length_scale_to_meter == '':
+            self.length_scale_to_meter = str(input('field length units to meters'))
+        if self.properties.time_unit == None or self.properties.time_unit == '':
+            self.properties.time_unit = str(input('field time units'))
+        if self.properties.time_scale_to_seconds== None or self.properties.time_scale_to_seconds == '':
+            self.properties.time_scale_to_seconds = str(input('field time units to seconds'))
+        
         for xy in XY:
+            self.data[xy].properties.length_unit = self.properties.length_unit
+            self.data[xy].properties.length_scale_to_meter = self.properties.length_scale_to_meter
+            self.data[xy].properties.time_unit = self.properties.time_unit
+            self.data[xy].properties.time_scale_to_seconds = self.properties.time_scale_to_seconds
             self.data[xy].convert_units(output_length_unit,output_time_unit)
-            
-        self.properties.lenght_unit = self.data[XY[0]].properties.lenght_unit
-        self.properties.length_scale_to_meter = self.data[XY[0]].properties.length_scale_to_meter
-        self.properties.time_unit = self.data[XY[0]].properties.time_unit
-        self.properties.time_scale_to_seconds = self.data[XY[0]].properties.time_scale_to_seconds
-        self.properties.velocity_units = self.data[XY[0]].properties.velocity_units
+            self.add_vec(self.data[xy])
+            self.remove_vec(xy[0],xy[1])
+        
+        XY0 = list(self.data.keys())[0]
+        self.properties.length_unit = self.data[XY0].properties.length_unit
+        self.properties.length_scale_to_meter = self.data[XY0].properties.length_scale_to_meter
+        self.properties.time_unit = self.data[XY0].properties.time_unit
+        self.properties.time_scale_to_seconds = self.data[XY0].properties.time_scale_to_seconds
+        self.properties.velocity_units = self.data[XY0].properties.velocity_units
         
     def remove_vec(self,X,Y,vector=None):
         if vector is not None:
@@ -215,22 +237,48 @@ class field:
                 self.move_to_filtered(self.data[xy])
         
     def hist_filter(self,percentage):
-        hist_u,hist_V,hist2d = self.velocity_histogram()
+        def TrueXor(*args):
+            return sum(args) == 1
+        
+        hist_u,hist_v,hist2d = self.velocity_histogram()
+        #strech boundry edges
+        hist_u[1][0] = hist_u[1][0]-1
+        hist_u[1][-1] = hist_u[1][-1]+1
+        hist_v[1][0] = hist_v[1][0]-1
+        hist_v[1][-1] = hist_v[1][-1]+1
+        
+        hist2d[1][0] = hist2d[1][0]-1
+        hist2d[1][-1] = hist2d[1][-1]+1
+        hist2d[2][0] = hist2d[2][0]-1
+        hist2d[2][-1] = hist2d[2][-1]+1
+        
         XY = list(self.data.keys())
         number_of_vectors = len(XY)
         for xy in XY:
             u = self.data[xy].U
             v = self.data[xy].V
-            #strech boundry edges
-            hist2d[1][0] = hist2d[1][0]-1
-            hist2d[1][-1] = hist2d[1][-1]+1
-            hist2d[2][0] = hist2d[2][0]-1
-            hist2d[2][-1] = hist2d[2][-1]+1
+            if np.isfinite(u) and not np.isfinite(v):
+                if hist_u[0][np.digitize(u,hist_u[1])-1] / number_of_vectors > percentage/100:
+                    u_iter,v_iter = self.inverse_distance_interpolation(xy[0],xy[1])
+                    if np.isfinite(v_iter):
+                        self.data[xy].V = v_iter
+                        v = v_iter
+                    else:
+                        self.move_to_filtered(self.data[xy])
             
-            U_histpos = np.digitize(u,hist2d[1])-1
-            V_histpos = np.digitize(v,hist2d[2])-1
-            if hist2d[0][U_histpos,V_histpos] / number_of_vectors < percentage/100:
-                self.move_to_filtered(self.data[xy])
+            if np.isfinite(v) and not np.isfinite(u):
+                if hist_v[0][np.digitize(v,hist_v[1])-1] / number_of_vectors > percentage/100:
+                    u_iter,v_iter = self.inverse_distance_interpolation(xy[0],xy[1])
+                    if np.isfinite(u_iter):
+                        self.data[xy].U = u_iter
+                        u = u_iter
+                    else:
+                        self.move_to_filtered(self.data[xy])
+            if np.isfinite(v) and np.isfinite(u):
+                U_histpos = np.digitize(u,hist2d[1])-1
+                V_histpos = np.digitize(v,hist2d[2])-1
+                if hist2d[0][U_histpos,V_histpos] / number_of_vectors < percentage/100:
+                    self.move_to_filtered(self.data[xy])
     
     def Z_filter(self,threshold,neighbors=4,power=1):
         XY = list(self.data.keys())
@@ -254,16 +302,46 @@ class field:
             if 0.6745*(v - median_V) / max(median_absolute_deviation_V,0.01) > threshold:
                 self.move_to_filtered(self.data[xy])
                 continue
-
+    
+    def max_arg_filter(self,U_bound,V_bound):
+        XY = list(self.data.keys())
+        for xy in XY:
+            U_check = True
+            V_check = True
+            if self.data[xy].U > U_bound[1] or self.data[xy].U < U_bound[0]:
+                U_check=False
+            if self.data[xy].V > V_bound[1] or self.data[xy].V < V_bound[0]:
+                V_check=False
+            
+            if U_check and not V_check:
+                u_itr,v_itr = self.inverse_distance_interpolation(xy[0],xy[1])
+                self.data[xy].V = v_itr
+            elif V_check and not U_check:
+                u_itr,v_itr = self.inverse_distance_interpolation(xy[0],xy[1])
+                self.data[xy].U = u_itr
+            elif not V_check and not U_check:
+                self.move_to_filtered(self.data[xy])
             
     def mean_velocity(self):
         U,V = self.return_all_velocities()
         return np.nanmean(U),np.nanstd(U),np.nanmean(V),np.nanstd(V)
     
     def velocity_histogram(self,bins=10):
+        def remove_nans(u,v):
+            u = list(u)
+            v = list(v)
+            nan_index=[]
+            for i in range(len(u)):
+                if not np.isfinite(u[i]) or not np.isfinite(v[i]):
+                    nan_index.append(i)
+            for index in sorted(nan_index, reverse=True):
+                del u[index]
+                del v[index]
+            return np.array(u),np.array(v)
         U,V = self.return_all_velocities()
-        hist_U = np.histogram(U,bins)
-        hist_V = np.histogram(V,bins)
+        hist_U = np.histogram(U[np.isfinite(U)],bins)
+        hist_V = np.histogram(V[np.isfinite(V)],bins)
+        U,V = remove_nans(U,V)
         hist2d = np.histogram2d(U, V, bins)
         return hist_U,hist_V,hist2d
     
@@ -432,9 +510,8 @@ class field:
 
 
 class run:
-    def __init__(self,run_properties):  
+    def __init__(self):  
         self.fields = {}
-        self.properties = run_properties
     
     def add_field(self,field):
         self.fields[field.properties.frame] = field
@@ -452,7 +529,49 @@ class run:
         frames = self.frames()
         for frame in frames:
             self.fields[frame].remap(X,Y,shape_of_new_grid)
-    
+            
+    def convert_run_units(self,output_length_unit,output_time_unit,run_length_unit=None,run_length_scale_to_meter=None,run_time_unit=None,run_time_scale_to_seconds=None):
+        same_prop = check_str_bool(input('Do all frames in run have the same properties?'))
+        if same_prop:
+            ''' After correcting the properties of run use this:
+            if self.properties.length_unit == None or self.properties.length_unit == '':
+                self.properties.length_unit = str(input('run length units: '))    
+            if self.properties.length_scale_to_meter== None or self.properties.length_scale_to_meter == '':
+                self.properties.length_scale_to_meter = str(input('run length units to meters: '))
+            if self.properties.time_unit == None or self.properties.time_unit == '':
+                self.properties.time_unit = str(input('run time units: '))
+            if self.properties.time_scale_to_seconds== None or self.properties.time_scale_to_seconds == '':
+                self.properties.time_scale_to_seconds = str(input('run time units to seconds: '))
+            '''
+            if run_length_unit is None:
+                self.length_unit = str(input('run length units: '))
+            else:
+                self.length_unit = run_length_unit
+                
+            if run_length_scale_to_meter is None:
+                self.length_scale_to_meter = str(input('run length units to meters: '))
+            else:
+                self.length_scale_to_meter = run_length_scale_to_meter
+                
+            if run_time_unit is None:
+                self.time_unit = str(input('run time units: '))
+            else:
+                self.time_unit = run_time_unit
+                
+            if run_time_scale_to_seconds is None:
+                self.time_scale_to_seconds = str(input('run time units to seconds: '))
+            else:
+                self.time_scale_to_seconds = run_time_scale_to_seconds
+        
+        frames = self.frames()
+        for frame in frames:
+            if same_prop:
+                self.fields[frame].properties.length_unit = self.length_unit
+                self.fields[frame].properties.length_scale_to_meter = self.length_scale_to_meter
+                self.fields[frame].properties.time_unit = self.time_unit
+                self.fields[frame].properties.time_scale_to_seconds = self.time_scale_to_seconds
+            self.fields[frame].convert_field_units(output_length_unit,output_time_unit)
+            
     def check_same_grid_run(self):
         frames = self.frames()
         base_frame = frames[0]
@@ -790,10 +909,27 @@ class run:
                 tke[row,col] = np.sqrt((1/len(urms))*np.sum(urms**2+vrms**2))
 
         return X,Y,tke
-
+    
+    def run_filter_outliers(self,s2n_threshold=None,hist_percentage=None,Z_threshold=None,max_U_bound=None,max_V_bound=None):
+        frames = self.frames()
+        for frame in frames:
+            field = self.fields[frame]
+            if s2n_threshold is not None:
+                field.s2n_filter(s2n_threshold)
+            if hist_percentage is not None:
+                field.hist_filter(hist_percentage)
+            if Z_threshold is not None:
+                field.Z_filter(hist_percentage)
+            if max_U_bound is not None and max_V_bound is not None:
+                field.max_arg_filter(max_U_bound,max_V_bound)
+            elif max_U_bound is not None and max_V_bound is None:
+                field.max_arg_filter(max_U_bound,[-np.inf,np.inf])
+            elif max_U_bound is None and max_V_bound is not None:
+                field.max_arg_filter([-np.inf,np.inf],max_V_bound)
+        
 #debug
 '''
-=
+
 frame = 1
 dt = 0.001
 length_scale = 'pixel'
